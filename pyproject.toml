@@ -1,0 +1,16 @@
+[project]
+name = "ComfyUI-FlashVSR"
+description = "Powerful ComfyUI custom node built on the FlashVSR model, facilitating real-time diffusion-based video super-resolution for streaming applications."
+version = "0.01"
+license = {file = "LICENSE"}
+
+dependencies = ["torch", "torchvision", "numpy", "einops", "safetensors", "pillow", "huggingface_hub"]
+    
+[project.urls]
+Repository = "https://github.com/1038lab/ComfyUI-FlashVSR"
+#  Used by Comfy Registry https://comfyregistry.org
+
+[tool.comfy]
+PublisherId = "ailab"
+DisplayName = "ComfyUI-FlashVSR"
+Icon = ""
