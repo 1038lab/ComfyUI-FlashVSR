@@ -1,0 +1,2 @@
+# ComfyUI-FlashVSR
+ComfyUI-FlashVSR
