@@ -1,0 +1,8 @@
+torch
+torchvisio
+numpy<2
+einops
+safetensors
+tqdm
+pillow
+huggingface_hub
