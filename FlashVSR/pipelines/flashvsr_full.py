@@ -18,6 +18,14 @@ from ..models.wan_video_vae import WanVideoVAE, RMS_norm, CausalConv3d, Upsample
 from ..schedulers.flow_match import FlowMatchScheduler
 from .base import BasePipeline
 
+# --- Safetensors support ---
+st_load_file = None # Define the variable in global scope first
+try:
+    from safetensors.torch import load_file as st_load_file
+except ImportError:
+    # st_load_file remains None if import fails
+    print("Warning: 'safetensors' not installed. Safetensors (.safetensors) files cannot be loaded.")
+# ---------------------------
 
 # -----------------------------
 # 基础工具：ADAIN 所需的统计量（保留以备需要；管线默认用 wavelet）
@@ -80,7 +88,7 @@ def _wavelet_reconstruct(content: torch.Tensor, style: torch.Tensor, levels: int
     _, s_low = _wavelet_decompose(style, levels=levels)
     return c_high + s_low
 
-
+from ..models.utils import clean_vram
 # -----------------------------
 # 无状态颜色矫正模块（视频友好，默认 wavelet）
 # -----------------------------
@@ -165,13 +173,12 @@ class FlashVSRFullPipeline(BasePipeline):
         self.ColorCorrector = TorchColorCorrectorWavelet(levels=5)
 
         print(r"""
-███████╗██╗      █████╗ ███████╗██╗  ██╗██╗   ██╗███████╗█████╗
-██╔════╝██║     ██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝██╔══██╗
-█████╗  ██║     ███████║███████╗███████║╚██╗ ██╔╝███████╗███████║
-██╔══╝  ██║     ██╔══██║╚════██║██╔══██║ ╚████╔╝ ╚════██║██╔═██║
-██║     ███████╗██║  ██║███████║██║  ██║  ╚██╔╝  ███████║██║  ██║
-╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
-                          ⚡FlashVSR
+    ███████╗██╗      █████╗ ███████╗██╗  ██╗██╗   ██╗███████╗█████╗
+    ██╔════╝██║     ██╔══██╗██╔════╝██║  ██║██║   ██║██╔════╝██╔══██╗
+    █████╗  ██║     ███████║███████╗███████║╚██╗ ██╔╝███████╗███████║
+    ██╔══╝  ██║     ██╔══██║╚════██║██╔══██║ ╚████╔╝ ╚════██║██╔═██║
+    ██║     ███████╗██║  ██║███████║██║  ██║  ╚██╔╝  ███████║██║  ██║
+    ╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
 """)
 
     def enable_vram_management(self, num_persistent_param_in_dit=None):
@@ -250,20 +257,44 @@ class FlashVSRFullPipeline(BasePipeline):
     def init_cross_kv(
         self,
         context_tensor: Optional[torch.Tensor] = None,
+        prompt_path = None
     ):
         self.load_models_to_device(["dit"])
         """
         使用固定 prompt 生成文本 context，并在 WanModel 中初始化所有 CrossAttention 的 KV 缓存。
         必须在 __call__ 前显式调用一次。
         """
-        prompt_path = "../../examples/WanVSR/prompt_tensor/posi_prompt.pth"
+        #prompt_path = "../../examples/WanVSR/prompt_tensor/posi_prompt.pth"
         if self.dit is None:
             raise RuntimeError("请先通过 fetch_models / from_model_manager 初始化 self.dit")
 
         if context_tensor is None:
             if prompt_path is None:
                 raise ValueError("init_cross_kv: 需要提供 prompt_path 或 context_tensor 其一")
-            ctx = torch.load(prompt_path, map_location=self.device)
+
+            # --- Safetensors loading logic added here ---
+            prompt_path_lower = prompt_path.lower()
+            if prompt_path_lower.endswith(".safetensors"):
+                if st_load_file is None:
+                    raise ImportError("The 'safetensors' library must be installed to load .safetensors files.")
+                
+                # Load the tensor from safetensors
+                loaded_dict = st_load_file(prompt_path, device=self.device)
+                
+                # Safetensors loads a dict. Assuming the context tensor is the only or primary key.
+                if len(loaded_dict) == 1:
+                    ctx = list(loaded_dict.values())[0]
+                elif 'context' in loaded_dict: # Common key for text context
+                    ctx = loaded_dict['context']
+                else:
+                    raise ValueError(f"Safetensors file {prompt_path} does not contain an obvious single tensor ('context' key not found and multiple keys exist).")
+            
+            else:
+                # Default behavior for .pth, .pt, etc.
+                ctx = torch.load(prompt_path, map_location=self.device)
+            
+            # --------------------------------------------
+            # ctx = torch.load(prompt_path, map_location=self.device)    
         else:
             ctx = context_tensor
 
@@ -326,6 +357,8 @@ class FlashVSRFullPipeline(BasePipeline):
         kv_ratio=3.0,
         local_range = 9,
         color_fix = True,
+        unload_dit = False,
+        skip_vae = False,
     ):
         # 只接受 cfg=1.0（与原代码一致）
         assert cfg_scale == 1.0, "cfg_scale must be 1.0"
@@ -361,15 +394,17 @@ class FlashVSRFullPipeline(BasePipeline):
         if hasattr(self.dit, "LQ_proj_in"):
             self.dit.LQ_proj_in.clear_cache()
 
-
         latents_total = []
         self.vae.clear_cache()
+        
+        if unload_dit and hasattr(self, 'dit') and self.dit is not None:
+            current_dit_device = next(iter(self.dit.parameters())).device
+            if str(current_dit_device) != str(self.device):
+                print(f"[FlashVSR] DiT is on {current_dit_device}, moving it to target device {self.device}...")
+                self.dit.to(self.device)
 
         with torch.no_grad():
-            for cur_process_idx in tqdm(range(process_total_num)):
-                torch.cuda.synchronize()
-                dit_time_start = time.time()
-
+            for cur_process_idx in progress_bar_cmd(range(process_total_num)):
                 if cur_process_idx == 0:
                     pre_cache_k = [None] * len(self.dit.blocks)
                     pre_cache_v = [None] * len(self.dit.blocks)
@@ -402,7 +437,7 @@ class FlashVSRFullPipeline(BasePipeline):
                             for layer_idx in range(len(LQ_latents)):
                                 LQ_latents[layer_idx] = torch.cat([LQ_latents[layer_idx], cur[layer_idx]], dim=1)
                     cur_latents = latents[:, :, 4+cur_process_idx*2:6+cur_process_idx*2, :, :]
-
+                
                 # 推理（无 motion_controller / vace）
                 noise_pred_posi, pre_cache_k, pre_cache_v = model_fn_wan_video(
                     self.dit,
@@ -427,10 +462,26 @@ class FlashVSRFullPipeline(BasePipeline):
                 # 更新 latent
                 cur_latents = cur_latents - noise_pred_posi
                 latents_total.append(cur_latents)
+                
+            if unload_dit and hasattr(self, 'dit') and not next(self.dit.parameters()).is_cpu:
+                try:
+                    del pre_cache_k, pre_cache_v
+                except NameError:
+                    pass
+                print("[FlashVSR] Offloading DiT to the CPU to free up VRAM...")
+                self.dit.to('cpu')
+                clean_vram()
 
             latents = torch.cat(latents_total, dim=2)
-
+            
+            del latents_total
+            clean_vram()
+            
+            if skip_vae:
+                return latents
+            
             # Decode
+            print("[FlashVSR] Starting VAE decoding...")
             frames = self.decode_video(latents, **tiler_kwargs)
 
             # 颜色校正（wavelet）
