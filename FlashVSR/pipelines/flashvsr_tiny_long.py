@@ -12,20 +12,13 @@ from PIL import Image
 from tqdm import tqdm
 # import pyfiglet
 
+from ..models.utils import clean_vram
 from ..models import ModelManager
 from ..models.wan_video_dit import WanModel, RMSNorm, sinusoidal_embedding_1d
 from ..models.wan_video_vae import WanVideoVAE, RMS_norm, CausalConv3d, Upsample
 from ..schedulers.flow_match import FlowMatchScheduler
 from .base import BasePipeline
 
-# --- Safetensors support ---
-st_load_file = None # Define the variable in global scope first
-try:
-    from safetensors.torch import load_file as st_load_file
-except ImportError:
-    # st_load_file remains None if import fails
-    print("Warning: 'safetensors' not installed. Safetensors (.safetensors) files cannot be loaded.")
-# ---------------------------
 
 # -----------------------------
 # 基础工具：ADAIN 所需的统计量（保留以备需要；管线默认用 wavelet）
@@ -88,6 +81,15 @@ def _wavelet_reconstruct(content: torch.Tensor, style: torch.Tensor, levels: int
     _, s_low = _wavelet_decompose(style, levels=levels)
     return c_high + s_low
 
+# -----------------------------
+# Safetensors support ---------
+# -----------------------------
+st_load_file = None # Define the variable in global scope first
+try:
+    from safetensors.torch import load_file as st_load_file
+except ImportError:
+    # st_load_file remains None if import fails
+    print("Warning: 'safetensors' not installed. Safetensors (.safetensors) files cannot be loaded.")
 
 # -----------------------------
 # 无状态颜色矫正模块（视频友好，默认 wavelet）
@@ -154,7 +156,6 @@ class TorchColorCorrectorWavelet(nn.Module):
         out = torch.cat(outs, dim=2)
         return out
 
-from ..models.utils import clean_vram
 # -----------------------------
 # 简化版 Pipeline（仅 dit + vae）
 # -----------------------------
