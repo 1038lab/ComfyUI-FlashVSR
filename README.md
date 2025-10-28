@@ -2,6 +2,8 @@
 
 A powerful ComfyUI custom node based on the FlashVSR model, enabling real-time diffusion-based video super-resolution for streaming applications.
 
+![FlashVSR_V1.0.0](https://github.com/1038lab/ComfyUI-FlashVSR/blob/main/example_workflows/FlashVSR.jpg)
+
 ## **News & Updates**
 
 * **2025/10/24**: Initial release of ComfyUI-FlashVSR.  
