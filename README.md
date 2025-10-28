@@ -4,15 +4,8 @@ A powerful ComfyUI custom node based on the FlashVSR model, enabling real-time d
 
 ![FlashVSR_V1.0.0](https://github.com/1038lab/ComfyUI-FlashVSR/blob/main/example_workflows/FlashVSR.jpg)
 
-## **News & Updates**
-
-* **2025/10/24**: Initial release of ComfyUI-FlashVSR.  
-  * Added **FlashVSR ⚡** and **FlashVSR Advanced ⚡** nodes.  
-  * Implemented automatic model download from Hugging Face (1038lab/FlashVSR).  
-  * Supports `.safetensors` models, audio passthrough, and tiling for low VRAM.
-
 ## **Features**
-
+https://github.com/user-attachments/assets/1d1528c5-e3c1-487f-9c29-267ddb817809
 * **High-Quality Video Upscaling**: Utilizes the advanced FlashVSR model to upscale videos to 2x or 4x resolution.  
 * **Multiple Model Versions**:  
   * **Full (Best Quality)**: Highest quality results with significant VRAM usage.  
@@ -22,6 +15,12 @@ A powerful ComfyUI custom node based on the FlashVSR model, enabling real-time d
 * **Intelligent Tiling**: Supports `enable_tiling` to process high-resolution videos efficiently on low-VRAM GPUs.  
 * **Automatic Model Download**: On the first run, the node will automatically download the required `.safetensors` models from Hugging Face ([1038lab/FlashVSR](https://huggingface.co/1038lab/FlashVSR)).  
 * **Audio Passthrough**: Maintains the original audio during video frame processing, ensuring synchronization and quality preservation.
+
+## **News & Updates**
+* **2025/10/24**: Initial release of ComfyUI-FlashVSR.  
+  * Added **FlashVSR ⚡** and **FlashVSR Advanced ⚡** nodes.  
+  * Implemented automatic model download from Hugging Face (1038lab/FlashVSR).  
+  * Supports `.safetensors` models, audio passthrough, and tiling for low VRAM.
 
 ## **Installation**
 
