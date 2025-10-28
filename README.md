@@ -13,11 +13,12 @@ A powerful ComfyUI custom node based on the FlashVSR model, enabling real-time d
 
 * **High-Quality Video Upscaling**: Utilizes the advanced FlashVSR model to upscale videos to 2x or 4x resolution.  
 * **Multiple Model Versions**:  
-  * **Full (Best Quality)**: High-quality results with significant VRAM usage.  
+  * **Full (Best Quality)**: Highest quality results with significant VRAM usage.  
   * **Tiny (Fast)**: Balanced quality and speed for faster processing.  
-  * **Tiny Long (Low VRAM)**: Optimized for GPUs with limited VRAM.  
+  * **Tiny Long (Low VRAM)**: Optimized for GPUs with limited VRAM, ideal for long videos.  
+* **SageAttention Optimization** (Optional): Automatic ~20-30% speedup when SageAttention is installed. Falls back gracefully if not available.
 * **Intelligent Tiling**: Supports `enable_tiling` to process high-resolution videos efficiently on low-VRAM GPUs.  
-* **Automatic Model Download**: On the first run, the node will automatically download the required `.safetensors` models from Hugging Face (1038lab/FlashVSR).  
+* **Automatic Model Download**: On the first run, the node will automatically download the required `.safetensors` models from Hugging Face ([1038lab/FlashVSR](https://huggingface.co/1038lab/FlashVSR)).  
 * **Audio Passthrough**: Maintains the original audio during video frame processing, ensuring synchronization and quality preservation.
 
 ## **Installation**
@@ -66,6 +67,8 @@ A powerful ComfyUI custom node based on the FlashVSR model, enabling real-time d
 | `Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors` | Low-Quality Projection |
 | `Wan2_1_FlashVSR_TCDecoder_fp32.safetensors`     | Tiny Model Decoder     |
 
+> **📖 For optional performance optimization (~20-30% speedup), see [SageAttention Installation Guide](./SAGEATTENTION_INSTALL.md)**
+
 ## **Usage**
 
 This node processes **image (frame) sequences**. For a complete video workflow, combine it with other nodes in ComfyUI.
@@ -87,6 +90,7 @@ This node processes **image (frame) sequences**. For a complete video workflow, 
 | **quality_boost**            | Boosts quality at the cost of VRAM usage. Higher values yield better results.              | Default is `2.0`. The Full model can handle `3.0` without crashing.                                |
 | **Input Frames**             | The video frames to process.                                                               | Requires at least **21 frames** for initialization.                                                |
 | **4x Upscaling**             | Optimized for 4x upscaling.                                                                | 2x upscaling is supported, but 4x generally provides better results.                               |
+| **sageattention** (Advanced) | Enable/Disable SageAttention optimization.                                                 | Enabled by default. Provides ~20-30% speedup if `sageattention` package is installed.              |
 
 ## **About FlashVSR Model**
 
@@ -96,17 +100,41 @@ This node processes **image (frame) sequences**. For a complete video workflow, 
 
 * **ComfyUI**
 * **Python 3.10+**
-* Required packages:
+* **Required packages**:
+  * `torch >= 2.0.0`
+  * `torchvision >= 0.15.0`
+  * `safetensors >= 0.4.0`
+  * `huggingface_hub >= 0.19.0`
+  * `einops >= 0.6.0`
+  * `numpy >= 1.24.0`
+  * `tqdm >= 4.65.0`
+  * `pillow >= 9.5.0`
 
-  * `safetensors`
-  * `huggingface_hub`
-  * `einops`
+* **Optional packages** (for performance boost):
+  * `sageattention >= 1.0.0` - Provides ~20-30% speedup (see [Optional Performance Optimization](#optional-performance-optimization))
+  * `triton >= 2.1.0` - Required by SageAttention
 
 These packages are typically included in ComfyUI environments. If you encounter an import error, run:
 
 ```bash
-pip install safetensors huggingface-hub einops
+pip install torch>=2.0.0 torchvision>=0.15.0 safetensors>=0.4.0 huggingface-hub>=0.19.0 einops>=0.6.0
 ```
+
+### **Optional Performance Optimization**
+
+For an automatic ~20-30% performance boost, you can install SageAttention:
+
+```bash
+pip install sageattention triton
+```
+
+**Note**: 
+- SageAttention requires a CUDA-capable GPU and may conflict with some ComfyUI environments.
+- **For detailed installation instructions and troubleshooting**, see [SageAttention Installation Guide](./SAGEATTENTION_INSTALL.md).
+- If you encounter issues after installing SageAttention, you can:
+  1. Disable it in the **FlashVSR ⚡ Advanced** node by setting `sageattention` to `disable`.
+  2. Or uninstall it: `pip uninstall sageattention triton`
+- The node will work perfectly fine without SageAttention installed - it will automatically fall back to standard PyTorch attention.
 
 ## **Troubleshooting**
 
@@ -134,4 +162,3 @@ If this custom node helps you or if you appreciate the work, please give a ⭐ o
 ## **License**
 
 [GPL-3.0 License](https://github.com/1038lab/ComfyUI-FlashVSR/blob/main/LICENSE)
-

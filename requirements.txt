@@ -1,8 +1,14 @@
-torch
-torchvisio
-numpy<2
-einops
-safetensors
-tqdm
-pillow
-huggingface_hub
+# Core dependencies
+torch>=2.0.0
+torchvision>=0.15.0
+numpy>=1.24.0
+einops>=0.6.0
+safetensors>=0.4.0
+tqdm>=4.65.0
+pillow>=9.5.0
+huggingface_hub>=0.19.0
+
+# Optional performance optimizations (not required)
+# Uncomment if you want SageAttention support for ~20-30% speedup:
+# sageattention>=1.0.0
+# triton>=2.1.0
