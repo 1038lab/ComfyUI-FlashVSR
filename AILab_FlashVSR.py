@@ -394,8 +394,28 @@ class AILab_FlashVSR:
         device = "auto"
         dtype = "bf16"
         
-        if frames.shape[0] < 21:
+        frame_count = frames.shape[0]
+                
+        if frame_count < 21:
             raise ValueError(f"FlashVSR needs at least 21 frames to work, but got {frames.shape[0]}")
+
+        # Duplicate the last frame 2x because VSR removes the last 2 frames
+        last_frame = frames[-1:].repeat(2, *[1 for _ in range(frames.ndim - 1)])
+        frames = torch.cat([frames, last_frame], dim=0)
+        log(f"Duplicated last frame 2x {frame_count} >> {frames.shape[0]}", "info")
+        frame_count = frames.shape[0]
+
+        # Add padded frames
+        remainder = (frame_count - 5) % 8
+        added_frames = 0
+        if remainder != 0:
+            added_frames = 8 - remainder
+            last_frame = frames[-1:]
+            
+            last_frames = last_frame.repeat(added_frames, *[1 for _ in range(last_frame.ndim - 1)])
+            frames = torch.cat([frames, last_frames], dim=0)
+
+            log(f"Added {added_frames} padded frame(s) to the end. {frame_count} >> {frames.shape[0]}", 'info')
 
         presets = {
             "Fast (2x Speed)": ("tiny", 1.5, 1.0, 9, True, True, 256, 32),
@@ -425,9 +445,20 @@ class AILab_FlashVSR:
         del pipe
         clean_vram()
         log("Done", 'success')
-        
-        # Use helper function for frame adjustment
-        result = _adjust_frame_count(result, frames.shape[0])
+
+        # Remove padded frames
+        if added_frames > 0:
+            frame_count = result.shape[0]
+            result = result[:-added_frames]
+            log(f"Removed {added_frames} padded frame(s) from the end. {frame_count} >> {result.shape[0]}", 'info')
+            frame_count = result.shape[0]
+
+        # Remove the fist 2 frames because VSR duplicates the first frame 2x
+        result = result[2:]
+        log(f"Removed the first 2 frames {frame_count} >> {result.shape[0]}", 'info')
+
+        # Optional remove 1px black border
+        result = result[:, 1:-1, 1:-1, :]
 
         return (result, audio,)
     
@@ -472,11 +503,31 @@ class AILab_FlashVSR_Advanced:
         use_sage = (sageattention == "enable")
         dtype = precision  # Map precision parameter to dtype variable
         
-        if frames.shape[0] < 21:
+        frame_count = frames.shape[0]
+                
+        if frame_count < 21:
             raise ValueError(f"FlashVSR needs at least 21 frames to work, but got {frames.shape[0]}")
-        
+
         if enable_tiling and tile_overlap >= tile_size / 2:
             raise ValueError("tile_overlap must be less than half of tile_size")
+
+        # Duplicate the last frame 2x because VSR removes the last 2 frames
+        last_frame = frames[-1:].repeat(2, *[1 for _ in range(frames.ndim - 1)])
+        frames = torch.cat([frames, last_frame], dim=0)
+        log(f"Duplicated last frame 2x {frame_count} >> {frames.shape[0]}", "info")
+        frame_count = frames.shape[0]
+
+        # Add padded frames
+        remainder = (frame_count - 5) % 8
+        added_frames = 0
+        if remainder != 0:
+            added_frames = 8 - remainder
+            last_frame = frames[-1:]
+            
+            last_frames = last_frame.repeat(added_frames, *[1 for _ in range(last_frame.ndim - 1)])
+            frames = torch.cat([frames, last_frames], dim=0)
+
+            log(f"Added {added_frames} padded frame(s) to the end. {frame_count} >> {frames.shape[0]}", 'info')
         
         mode_map = {
             "Tiny (Fast)": "tiny",
@@ -507,9 +558,20 @@ class AILab_FlashVSR_Advanced:
         del pipe
         clean_vram()
         log("Done", 'success')
-        
-        # Use helper function for frame adjustment
-        result = _adjust_frame_count(result, frames.shape[0])
+
+        # Remove padded frames
+        if added_frames > 0:
+            frame_count = result.shape[0]
+            result = result[:-added_frames]
+            log(f"Removed {added_frames} padded frame(s) from the end. {frame_count} >> {result.shape[0]}", 'info')
+            frame_count = result.shape[0]
+
+        # Remove the fist 2 frames because VSR duplicates the first frame 2x
+        result = result[2:]
+        log(f"Removed the first 2 frames {frame_count} >> {result.shape[0]}", 'info')
+
+        # Optional remove 1px black border
+        result = result[:, 1:-1, 1:-1, :]
 
         return (result, audio,)
 
