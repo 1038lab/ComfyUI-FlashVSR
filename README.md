@@ -17,10 +17,16 @@ https://github.com/user-attachments/assets/1d1528c5-e3c1-487f-9c29-267ddb817809
 * **Audio Passthrough**: Maintains the original audio during video frame processing, ensuring synchronization and quality preservation.
 
 ## **News & Updates**
-* **2025/10/24**: Initial release of ComfyUI-FlashVSR.  
-  * Added **FlashVSR ⚡** and **FlashVSR Advanced ⚡** nodes.  
-  * Implemented automatic model download from Hugging Face (1038lab/FlashVSR).  
-  * Supports `.safetensors` models, audio passthrough, and tiling for low VRAM.
+**2025/11/15**: FlashVSR 1.1 Model Update + Frame Duplication Fix ( [update.md](https://github.com/1038lab/ComfyUI-FlashVSR/blob/main/update.md#v110-20251115) )
+- Added new model: Wan2_1-T2V-1.1_3B_FlashVSR_fp32.safetensors
+- Improved T2V → VSR quality, stability, details
+- Applied frame duplication fix (Issue #3)
+- Updated UPDATE.md accordingly
+  
+**2025/10/24**: Initial release of ComfyUI-FlashVSR.  
+- Added **FlashVSR ⚡** and **FlashVSR Advanced ⚡** nodes.  
+- Implemented automatic model download from Hugging Face (1038lab/FlashVSR).  
+- Supports `.safetensors` models, audio passthrough, and tiling for low VRAM.
 
 ## **Installation**
 
@@ -61,12 +67,14 @@ https://github.com/user-attachments/assets/1d1528c5-e3c1-487f-9c29-267ddb817809
 * The models will be automatically downloaded to `ComfyUI/models/FlashVSR/` on the first run.
 * To manually download the models, visit [1038lab/FlashVSR on Hugging Face](https://huggingface.co/1038lab/FlashVSR) and download the `.safetensors` files into the `ComfyUI/models/FlashVSR/` folder.
 
-| Model File                                       | Purpose                |
-| ------------------------------------------------ | ---------------------- |
-| `Wan2_1-T2V-1_3B_FlashVSR_fp32.safetensors`      | Main Diffusion Model   |
-| `Wan2.1_VAE.safetensors`                         | Video VAE              |
-| `Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors` | Low-Quality Projection |
-| `Wan2_1_FlashVSR_TCDecoder_fp32.safetensors`     | Tiny Model Decoder     |
+| Model File | Purpose |
+|-----------|---------|
+| Wan2_1-T2V-1.1_3B_FlashVSR_fp32.safetensors | **New FlashVSR 1.1 Main Diffusion Model** |
+| Wan2_1-T2V-1_3B_FlashVSR_fp32.safetensors | Previous FlashVSR 1.0 Main Model |
+| Wan2.1_VAE.safetensors | Video VAE |
+| Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors | Low-Quality Projection |
+| Wan2_1_FlashVSR_TCDecoder_fp32.safetensors | Tiny Model Decoder |
+
 
 > **📖 For optional performance optimization (~20-30% speedup), see [SageAttention Installation Guide](./SAGEATTENTION_INSTALL.md)**
 
