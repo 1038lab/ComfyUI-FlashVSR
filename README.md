@@ -2,11 +2,10 @@
 
 A powerful ComfyUI custom node based on the FlashVSR model, enabling real-time diffusion-based video super-resolution for streaming applications.
 
-![FlashVSR_V1.0.0](https://github.com/1038lab/ComfyUI-FlashVSR/blob/main/example_workflows/FlashVSR.jpg)
+https://github.com/user-attachments/assets/1d1528c5-e3c1-487f-9c29-267ddb817809
 
 ## **Features**
-https://github.com/user-attachments/assets/1d1528c5-e3c1-487f-9c29-267ddb817809
-* **High-Quality Video Upscaling**: Utilizes the advanced FlashVSR model to upscale videos to 2x or 4x resolution.  
+**High-Quality Video Upscaling**: Utilizes the advanced FlashVSR model to upscale videos to 2x or 4x resolution.  
 * **Multiple Model Versions**:  
   * **Full (Best Quality)**: Highest quality results with significant VRAM usage.  
   * **Tiny (Fast)**: Balanced quality and speed for faster processing.  
