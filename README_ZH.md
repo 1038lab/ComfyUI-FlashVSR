@@ -2,12 +2,19 @@
 
 基于 FlashVSR 模型的强大 ComfyUI 自定义节点，实现实时扩散式视频超分辨率处理，适用于流媒体应用。
 
-## **新闻与更新**
+https://github.com/user-attachments/assets/1d1528c5-e3c1-487f-9c29-267ddb817809
 
-* **2025/10/24**: ComfyUI-FlashVSR 首次发布  
-  * 添加了 **FlashVSR ⚡** 和 **FlashVSR Advanced ⚡** 节点  
-  * 实现从 Hugging Face 自动下载模型 (1038lab/FlashVSR)  
-  * 支持 `.safetensors` 模型、音频透传以及低显存 tiling 功能
+## **新闻与更新**
+**2025/11/15**：FlashVSR 1.1 模型更新 + 画面重复修复 ( [update.md](https://github.com/1038lab/ComfyUI-FlashVSR/blob/main/update.md#v110-20251115) )
+- 新增模型：Wan2_1-T2V-1.1_3B_FlashVSR_fp32.safetensors
+- 大幅提升 T2V → VSR 的清晰度、稳定性与细节表现
+- 应用了帧重复修复补丁（Issue #3）
+- 同步更新 UPDATE.md 文件
+
+**2025/10/24**: ComfyUI-FlashVSR 首次发布  
+- 添加了 **FlashVSR ⚡** 和 **FlashVSR Advanced ⚡** 节点  
+- 实现从 Hugging Face 自动下载模型 (1038lab/FlashVSR)  
+- 支持 `.safetensors` 模型、音频透传以及低显存 tiling 功能
 
 ## **功能特性**
 
@@ -60,12 +67,14 @@ git clone https://github.com/1038lab/ComfyUI-FlashVSR.git
 * 模型将在首次运行时自动下载到 `ComfyUI/models/FlashVSR/`
 * 如需手动下载模型,请访问 [1038lab/FlashVSR on Hugging Face](https://huggingface.co/1038lab/FlashVSR) 并将 `.safetensors` 文件下载到 `ComfyUI/models/FlashVSR/` 文件夹
 
-| 模型文件                                           | 用途           |
-| ------------------------------------------------ | -------------- |
-| `Wan2_1-T2V-1_3B_FlashVSR_fp32.safetensors`      | 主扩散模型     |
-| `Wan2.1_VAE.safetensors`                         | 视频 VAE       |
-| `Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors` | 低质量投影模型 |
-| `Wan2_1_FlashVSR_TCDecoder_fp32.safetensors`     | Tiny 模型解码器 |
+| 模型文件 | 用途 |
+|----------|------|
+| Wan2_1-T2V-1.1_3B_FlashVSR_fp32.safetensors | **全新 FlashVSR 1.1 主模型** |
+| Wan2_1-T2V-1_3B_FlashVSR_fp32.safetensors | 旧 FlashVSR 1.0 主模型 |
+| Wan2.1_VAE.safetensors | 视频 VAE |
+| Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors | 低质投影模型 |
+| Wan2_1_FlashVSR_TCDecoder_fp32.safetensors | Tiny 模型解码器 |
+
 
 > **📖 可选性能优化指南（约 20-30% 速度提升），请参见 [SageAttention 安装指南](./SAGEATTENTION_INSTALL.md)**
 
@@ -162,3 +171,4 @@ pip install sageattention triton
 ## **许可证**
 
 [GPL-3.0 License](https://github.com/1038lab/ComfyUI-FlashVSR/blob/main/LICENSE)
+
