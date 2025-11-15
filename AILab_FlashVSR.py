@@ -64,7 +64,7 @@ def check_and_download_models():
         model_dir = FLASHVSR_MODEL_DIR
 
         required_files = [
-            "Wan2_1-T2V-1_3B_FlashVSR_fp32.safetensors", 
+            "Wan2_1-T2V-1.1_3B_FlashVSR_fp32.safetensors", 
             "Wan2.1_VAE.safetensors", 
             "Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors", 
             "Wan2_1_FlashVSR_TCDecoder_fp32.safetensors", 
@@ -191,7 +191,7 @@ def make_mask(h, w, overlap):
 def init_pipe(mode, device, dtype):
     model_dir = check_and_download_models()
     
-    ckpt = os.path.join(model_dir, "Wan2_1-T2V-1_3B_FlashVSR_fp32.safetensors")
+    ckpt = os.path.join(model_dir, "Wan2_1-T2V-1.1_3B_FlashVSR_fp32.safetensors")
     vae = os.path.join(model_dir, "Wan2.1_VAE.safetensors")
     lq = os.path.join(model_dir, "Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors")
     tcd = os.path.join(model_dir, "Wan2_1_FlashVSR_TCDecoder_fp32.safetensors")
@@ -585,4 +585,3 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "AILab_FlashVSR": "FlashVSR ⚡",
     "AILab_FlashVSR_Advanced": "FlashVSR ⚡ Advanced",
 }
-
