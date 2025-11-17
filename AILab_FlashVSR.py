@@ -26,6 +26,7 @@ from safetensors.torch import load_file
 from .FlashVSR import ModelManager, FlashVSRFullPipeline, FlashVSRTinyPipeline, FlashVSRTinyLongPipeline
 from .FlashVSR.models.TCDecoder import build_tcdecoder
 from .FlashVSR.models.utils import clean_vram, Buffer_LQ4x_Proj
+from .FlashVSR.models import wan_video_dit as _wan_video_dit
 
 def get_device_list():
     devs = ["auto"]
@@ -52,6 +53,47 @@ _flashvsr_models_checked = False
 _flashvsr_check_lock = threading.Lock()
 FLASHVSR_MODEL_DIR = os.path.join(folder_paths.models_dir, "FlashVSR")
 
+
+def _patch_wan_video_dit():
+    if getattr(_wan_video_dit, "_flashvsr_dtype_patch", False):
+        return
+
+    def sinusoidal_embedding_1d(dim, position):
+        work_dtype = torch.float32
+        half_dim = max(dim // 2, 1)
+        scale = torch.arange(half_dim, dtype=work_dtype, device=position.device)
+        inv_freq = torch.pow(10000.0, -scale / half_dim)
+        sinusoid = torch.outer(position.to(work_dtype), inv_freq)
+        x = torch.cat([torch.cos(sinusoid), torch.sin(sinusoid)], dim=1)
+        return x.to(position.dtype)
+
+    def precompute_freqs_cis(dim: int, end: int = 1024, theta: float = 10000.0):
+        work_dtype = torch.float32
+        half_dim = max(dim // 2, 1)
+        base = torch.arange(0, dim, 2, dtype=work_dtype)[:half_dim]
+        freqs = torch.pow(theta, -base / max(dim, 1))
+        steps = torch.arange(end, dtype=work_dtype)
+        angles = torch.outer(steps, freqs)
+        return torch.polar(torch.ones_like(angles), angles)
+
+    def rope_apply(x, freqs, num_heads):
+        x = rearrange(x, "b s (n d) -> b s n d", n=num_heads)
+        orig_dtype = x.dtype
+        work_dtype = torch.float32 if orig_dtype in (torch.float16, torch.bfloat16) else orig_dtype
+        reshaped = x.to(work_dtype).reshape(x.shape[0], x.shape[1], x.shape[2], -1, 2)
+        x_complex = torch.view_as_complex(reshaped)
+        freqs = freqs.to(dtype=x_complex.dtype, device=x_complex.device)
+        x_out = torch.view_as_real(x_complex * freqs).flatten(2)
+        return x_out.to(orig_dtype)
+
+    _wan_video_dit.sinusoidal_embedding_1d = sinusoidal_embedding_1d
+    _wan_video_dit.precompute_freqs_cis = precompute_freqs_cis
+    _wan_video_dit.rope_apply = rope_apply
+    _wan_video_dit._flashvsr_dtype_patch = True
+
+
+_patch_wan_video_dit()
+
 def check_and_download_models():
     global _flashvsr_models_checked
     
@@ -64,11 +106,11 @@ def check_and_download_models():
         model_dir = FLASHVSR_MODEL_DIR
 
         required_files = [
-            "Wan2_1-T2V-1.1_3B_FlashVSR_fp32.safetensors", 
-            "Wan2.1_VAE.safetensors", 
-            "Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors", 
-            "Wan2_1_FlashVSR_TCDecoder_fp32.safetensors", 
-            "Prompt.safetensors"
+            "FlashVSR1_1.safetensors",
+            "Wan2.1_VAE.safetensors",
+            "LQ_proj_in.safetensors",
+            "TCDecoder.safetensors",
+            "Prompt.safetensors",
         ]
 
         if not os.path.exists(model_dir):
@@ -117,6 +159,36 @@ def compute_dims(w, h, scale, align=128):
 
 def align_frames(n):
     return 0 if n < 1 else ((n - 1) // 8) * 8 + 1
+
+
+def _repeat_last_frame(frames, repeat_count):
+    if repeat_count <= 0:
+        return frames
+    repeats = [repeat_count] + [1 for _ in range(frames.ndim - 1)]
+    tail = frames[-1:].repeat(*repeats)
+    return torch.cat([frames, tail], dim=0)
+
+
+def _pad_video_sequence(frames):
+    frames = _repeat_last_frame(frames, 2)
+    added_frames = 0
+    remainder = (frames.shape[0] - 5) % 8
+    if remainder != 0:
+        added_frames = 8 - remainder
+        frames = _repeat_last_frame(frames, added_frames)
+    return frames, added_frames
+
+
+def _restore_video_sequence(result, added_frames, expected_frames):
+    if added_frames > 0 and result.shape[0] > added_frames:
+        log(f"Removed {added_frames} padded frame(s) from the end.", 'info')
+        result = result[:-added_frames]
+    if result.shape[0] <= 2:
+        log("FlashVSR returned fewer than 3 frames after padding removal; using fallback trimming.", 'warning')
+        return _adjust_frame_count(result, expected_frames)
+    result = result[2:]
+    log("Removed the first 2 frames duplicated internally by FlashVSR.", 'info')
+    return _adjust_frame_count(result, expected_frames)
 
 
 def prepare_video(frames, device, scale, dtype):
@@ -191,10 +263,10 @@ def make_mask(h, w, overlap):
 def init_pipe(mode, device, dtype):
     model_dir = check_and_download_models()
     
-    ckpt = os.path.join(model_dir, "Wan2_1-T2V-1.1_3B_FlashVSR_fp32.safetensors")
+    ckpt = os.path.join(model_dir, "FlashVSR1_1.safetensors")
     vae = os.path.join(model_dir, "Wan2.1_VAE.safetensors")
-    lq = os.path.join(model_dir, "Wan2_1_FlashVSR_LQ_proj_model_bf16.safetensors")
-    tcd = os.path.join(model_dir, "Wan2_1_FlashVSR_TCDecoder_fp32.safetensors")
+    lq = os.path.join(model_dir, "LQ_proj_in.safetensors")
+    tcd = os.path.join(model_dir, "TCDecoder.safetensors")
     prompt = os.path.join(model_dir, "Prompt.safetensors")
     
     mm = ModelManager(torch_dtype=dtype, device="cpu")
@@ -394,28 +466,13 @@ class AILab_FlashVSR:
         device = "auto"
         dtype = "bf16"
         
-        frame_count = frames.shape[0]
-                
-        if frame_count < 21:
+        original_frame_count = frames.shape[0]
+        if original_frame_count < 21:
             raise ValueError(f"FlashVSR needs at least 21 frames to work, but got {frames.shape[0]}")
 
-        # Duplicate the last frame 2x because VSR removes the last 2 frames
-        last_frame = frames[-1:].repeat(2, *[1 for _ in range(frames.ndim - 1)])
-        frames = torch.cat([frames, last_frame], dim=0)
-        log(f"Duplicated last frame 2x {frame_count} >> {frames.shape[0]}", "info")
-        frame_count = frames.shape[0]
-
-        # Add padded frames
-        remainder = (frame_count - 5) % 8
-        added_frames = 0
-        if remainder != 0:
-            added_frames = 8 - remainder
-            last_frame = frames[-1:]
-            
-            last_frames = last_frame.repeat(added_frames, *[1 for _ in range(last_frame.ndim - 1)])
-            frames = torch.cat([frames, last_frames], dim=0)
-
-            log(f"Added {added_frames} padded frame(s) to the end. {frame_count} >> {frames.shape[0]}", 'info')
+        frames, added_frames = _pad_video_sequence(frames)
+        if frames.shape[0] != original_frame_count:
+            log(f"Extended sequence for FlashVSR: {original_frame_count} -> {frames.shape[0]} frames", 'info')
 
         presets = {
             "Fast (2x Speed)": ("tiny", 1.5, 1.0, 9, True, True, 256, 32),
@@ -446,19 +503,7 @@ class AILab_FlashVSR:
         clean_vram()
         log("Done", 'success')
 
-        # Remove padded frames
-        if added_frames > 0:
-            frame_count = result.shape[0]
-            result = result[:-added_frames]
-            log(f"Removed {added_frames} padded frame(s) from the end. {frame_count} >> {result.shape[0]}", 'info')
-            frame_count = result.shape[0]
-
-        # Remove the fist 2 frames because VSR duplicates the first frame 2x
-        result = result[2:]
-        log(f"Removed the first 2 frames {frame_count} >> {result.shape[0]}", 'info')
-
-        # Optional remove 1px black border
-        result = result[:, 1:-1, 1:-1, :]
+        result = _restore_video_sequence(result, added_frames, original_frame_count)
 
         return (result, audio,)
     
@@ -469,10 +514,10 @@ class AILab_FlashVSR_Advanced:
         return {
             "required": {
                 "frames": ("IMAGE",),
-                "model_version": (["Tiny (Fast)", "Tiny Long (Low VRAM)", "Full (Best Quality)"], {"default": "Tiny (Fast)", "tooltip": "Tiny: Fast, good quality. Tiny Long: Slower, uses much less VRAM for long videos. Full: Best quality, highest VRAM."}),
+                "model_version": (["Tiny (Fast)", "Tiny Long (Low VRAM)", "Full (Best Quality)"], {"default": "Full (Best Quality)", "tooltip": "Tiny: Fast, good quality. Tiny Long: Slower, uses much less VRAM for long videos. Full: Best quality, highest VRAM."}),
                 "scale": ("INT", {"default": 2, "min": 2, "max": 4, "step": 2, "tooltip": "The upscaling factor. 4x is recommended for best quality."}),
                 "enable_tiling": ("BOOLEAN", {"default": True, "tooltip": "Process the video in tiles. Slower, but saves a large amount of VRAM."}),
-                "tile_size": ("INT", {"default": 256, "min": 128, "max": 1024, "step": 32, "tooltip": "The height/width of each tile (before upscaling). Larger tiles are faster but use more VRAM. Recommended: 384-512 for HD videos."}),
+                "tile_size": ("INT", {"default": 384, "min": 128, "max": 1024, "step": 32, "tooltip": "The height/width of each tile (before upscaling). Larger tiles are faster but use more VRAM. Recommended: 384-512 for HD videos."}),
                 "tile_overlap": ("INT", {"default": 24, "min": 8, "max": 256, "step": 8, "tooltip": "The amount of overlap between tiles to prevent visible seams. Recommended: 48-64 for smooth blending. (Must be < Tile Size / 2)"}),
                 "speed_optimization": ("FLOAT", {"default": 2.0, "min": 1.5, "max": 2.0, "step": 0.1, "tooltip": "Higher value (e.g., 2.0) is faster but may capture less fine detail. Lower (e.g., 1.5) is slower but more detailed."}),
                 "quality_boost": ("FLOAT", {"default": 2.0, "min": 1.0, "max": 3.0, "step": 0.1, "tooltip": "Increases quality and detail preservation at the cost of more VRAM. (Higher = Better Quality)"}),
@@ -503,31 +548,16 @@ class AILab_FlashVSR_Advanced:
         use_sage = (sageattention == "enable")
         dtype = precision  # Map precision parameter to dtype variable
         
-        frame_count = frames.shape[0]
-                
-        if frame_count < 21:
+        original_frame_count = frames.shape[0]
+        if original_frame_count < 21:
             raise ValueError(f"FlashVSR needs at least 21 frames to work, but got {frames.shape[0]}")
 
         if enable_tiling and tile_overlap >= tile_size / 2:
             raise ValueError("tile_overlap must be less than half of tile_size")
 
-        # Duplicate the last frame 2x because VSR removes the last 2 frames
-        last_frame = frames[-1:].repeat(2, *[1 for _ in range(frames.ndim - 1)])
-        frames = torch.cat([frames, last_frame], dim=0)
-        log(f"Duplicated last frame 2x {frame_count} >> {frames.shape[0]}", "info")
-        frame_count = frames.shape[0]
-
-        # Add padded frames
-        remainder = (frame_count - 5) % 8
-        added_frames = 0
-        if remainder != 0:
-            added_frames = 8 - remainder
-            last_frame = frames[-1:]
-            
-            last_frames = last_frame.repeat(added_frames, *[1 for _ in range(last_frame.ndim - 1)])
-            frames = torch.cat([frames, last_frames], dim=0)
-
-            log(f"Added {added_frames} padded frame(s) to the end. {frame_count} >> {frames.shape[0]}", 'info')
+        frames, added_frames = _pad_video_sequence(frames)
+        if frames.shape[0] != original_frame_count:
+            log(f"Extended sequence for FlashVSR: {original_frame_count} -> {frames.shape[0]} frames", 'info')
         
         mode_map = {
             "Tiny (Fast)": "tiny",
@@ -559,19 +589,7 @@ class AILab_FlashVSR_Advanced:
         clean_vram()
         log("Done", 'success')
 
-        # Remove padded frames
-        if added_frames > 0:
-            frame_count = result.shape[0]
-            result = result[:-added_frames]
-            log(f"Removed {added_frames} padded frame(s) from the end. {frame_count} >> {result.shape[0]}", 'info')
-            frame_count = result.shape[0]
-
-        # Remove the fist 2 frames because VSR duplicates the first frame 2x
-        result = result[2:]
-        log(f"Removed the first 2 frames {frame_count} >> {result.shape[0]}", 'info')
-
-        # Optional remove 1px black border
-        result = result[:, 1:-1, 1:-1, :]
+        result = _restore_video_sequence(result, added_frames, original_frame_count)
 
         return (result, audio,)
 
