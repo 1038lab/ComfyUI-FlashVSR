@@ -1,7 +1,7 @@
 [project]
 name = "ComfyUI-FlashVSR"
 description = "Powerful ComfyUI custom node built on the FlashVSR model, facilitating real-time diffusion-based video super-resolution for streaming applications."
-version = "1.1.0"
+version = "1.1.1"
 license = {file = "LICENSE"}
 
 dependencies = [
@@ -30,3 +30,4 @@ PublisherId = "ailab"
 DisplayName = "ComfyUI-FlashVSR"
 
 Icon = ""
+
